@@ -7,112 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ===== 네비게이션용 함수 정의 =====
-
-def Login():
-    st.header("🔐 로그인")
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-    if submitted:
-        try:
-            # Firebase 인증
-            user = auth.sign_in_with_email_and_password(email, password)
-            # 세션에 로그인 상태 저장
-            st.session_state.logged_in    = True
-            st.session_state.id_token     = user['idToken']
-            st.session_state.user_email   = email
-
-            # 사용자 프로필 로드
-            uid = user['localId']
-            user_data = firestore.child("users") \
-                                 .child(uid) \
-                                 .get(st.session_state.id_token) \
-                                 .val()
-            st.session_state.user_name    = user_data.get("name", "")
-            st.session_state.user_gender  = user_data.get("gender", "")
-            st.session_state.user_phone   = user_data.get("phone", "")
-
-            st.success("로그인 성공!")
-            # 한 번의 리런으로 Home 페이지로 이동
-            st.experimental_set_query_params(page="home")
-            st.experimental_rerun()
-
-        except Exception:
-            st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
-
-
-def Register(prev_url):
-    st.header("📝 회원가입")
-    with st.form("register_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        password2 = st.text_input("Confirm Password", type="password")
-        name = st.text_input("Name")
-        gender = st.selectbox("Gender", ["","Male","Female","Other"])
-        phone = st.text_input("Phone")
-        submitted = st.form_submit_button("Register")
-    if submitted:
-        if password != password2:
-            st.error("비밀번호가 일치하지 않습니다.")
-        else:
-            try:
-                user = auth.create_user_with_email_and_password(email, password)
-                uid = user['localId']
-                token = user['idToken']
-                firestore.child("users").child(uid).set({
-                    "email": email,
-                    "name": name,
-                    "gender": gender,
-                    "phone": phone
-                }, token)
-                st.success("회원가입 완료! 로그인 페이지로 이동합니다.")
-                st.experimental_rerun()
-            except Exception as e:
-                msg = str(e)
-                if 'EMAIL_EXISTS' in msg:
-                    st.error("이미 사용 중인 이메일입니다. 다른 이메일을 사용해주세요.")
-                else:
-                    st.error(f"회원가입 오류: {msg}")
-
-
-def FindPassword():
-    st.header("🔎 비밀번호 찾기")
-    with st.form("pw_form"):
-        email = st.text_input("Email")
-        submitted = st.form_submit_button("Send Reset Email")
-    if submitted:
-        try:
-            auth.send_password_reset_email(email)
-            st.success("비밀번호 재설정 이메일이 발송되었습니다.")
-        except Exception:
-            st.error("이메일 전송 중 오류가 발생했습니다.")
-
-
-def UserInfo():
-    st.header("👤 내 정보")
-    if not st.session_state.logged_in:
-        st.warning("먼저 로그인해 주세요.")
-    else:
-        st.write(f"**Email:** {st.session_state.user_email}")
-        st.write(f"**Name:** {st.session_state.user_name}")
-        st.write(f"**Gender:** {st.session_state.user_gender}")
-        st.write(f"**Phone:** {st.session_state.user_phone}")
-
-
-def Logout():
-    # 로그인 상태만 초기화
-    st.session_state.logged_in = False
-    # 사용자 관련 키들만 제거
-    for key in ["id_token", "user_email", "user_name", "user_gender", "user_phone"]:
-        st.session_state.pop(key, None)
-
-    st.success("로그아웃 되었습니다.")
-    # Home 페이지로 바로 이동
-    st.experimental_set_query_params(page="home")
-    st.experimental_rerun()
-
 # ---------------------
 # Firebase 설정
 # ---------------------
@@ -121,10 +15,11 @@ firebase_config = {
     "authDomain": "sw-projects-49798.firebaseapp.com",
     "databaseURL": "https://sw-projects-49798-default-rtdb.firebaseio.com",
     "projectId": "sw-projects-49798",
-    "storageBucket": "sw-projects-49798-firebasestorage.app",
+    "storageBucket": "sw-projects-49798.firebasestorage.app",
     "messagingSenderId": "812186368395",
     "appId": "1:812186368395:web:be2f7291ce54396209d78e"
 }
+
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
 firestore = firebase.database()
@@ -138,11 +33,12 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.id_token = ""
     st.session_state.user_name = ""
-    st.session_state.user_gender = ""
+    st.session_state.user_gender = "선택 안함"
     st.session_state.user_phone = ""
+    st.session_state.profile_image_url = ""
 
 # ---------------------
-# Home 페이지 클래스
+# 홈 페이지 클래스
 # ---------------------
 class Home:
     def __init__(self, login_page, register_page, findpw_page):
@@ -153,10 +49,144 @@ class Home:
             """
 ---
 **Population Trends Dataset**  
-- File: `population_trends.csv`  
+- File: population_trends.csv  
 - Description: Yearly and regional population, births, and deaths statistics  
 """
         )
+
+# ---------------------
+# 로그인 페이지 클래스
+# ---------------------
+class Login:
+    def __init__(self):
+        st.title("🔐 로그인")
+        email = st.text_input("이메일")
+        password = st.text_input("비밀번호", type="password")
+        if st.button("로그인"):
+            try:
+                user = auth.sign_in_with_email_and_password(email, password)
+                st.session_state.logged_in = True
+                st.session_state.user_email = email
+                st.session_state.id_token = user['idToken']
+
+                user_info = firestore.child("users").child(email.replace(".", "_")).get().val()
+                if user_info:
+                    st.session_state.user_name = user_info.get("name", "")
+                    st.session_state.user_gender = user_info.get("gender", "선택 안함")
+                    st.session_state.user_phone = user_info.get("phone", "")
+                    st.session_state.profile_image_url = user_info.get("profile_image_url", "")
+
+                st.success("로그인 성공!")
+                time.sleep(1)
+                st.rerun()
+            except Exception:
+                st.error("로그인 실패")
+
+# ---------------------
+# 회원가입 페이지 클래스
+# ---------------------
+class Register:
+    def __init__(self, login_page_url):
+        st.title("📝 회원가입")
+        email = st.text_input("이메일")
+        password = st.text_input("비밀번호", type="password")
+        name = st.text_input("성명")
+        gender = st.selectbox("성별", ["선택 안함", "남성", "여성"])
+        phone = st.text_input("휴대전화번호")
+
+        if st.button("회원가입"):
+            try:
+                auth.create_user_with_email_and_password(email, password)
+                firestore.child("users").child(email.replace(".", "_")).set({
+                    "email": email,
+                    "name": name,
+                    "gender": gender,
+                    "phone": phone,
+                    "role": "user",
+                    "profile_image_url": ""
+                })
+                st.success("회원가입 성공! 로그인 페이지로 이동합니다.")
+                time.sleep(1)
+                st.switch_page(login_page_url)
+            except Exception:
+                st.error("회원가입 실패")
+
+# ---------------------
+# 비밀번호 찾기 페이지 클래스
+# ---------------------
+class FindPassword:
+    def __init__(self):
+        st.title("🔎 비밀번호 찾기")
+        email = st.text_input("이메일")
+        if st.button("비밀번호 재설정 메일 전송"):
+            try:
+                auth.send_password_reset_email(email)
+                st.success("비밀번호 재설정 이메일을 전송했습니다.")
+                time.sleep(1)
+                st.rerun()
+            except:
+                st.error("이메일 전송 실패")
+
+# ---------------------
+# 사용자 정보 수정 페이지 클래스
+# ---------------------
+class UserInfo:
+    def __init__(self):
+        st.title("👤 사용자 정보")
+
+        email = st.session_state.get("user_email", "")
+        new_email = st.text_input("이메일", value=email)
+        name = st.text_input("성명", value=st.session_state.get("user_name", ""))
+        gender = st.selectbox(
+            "성별",
+            ["선택 안함", "남성", "여성"],
+            index=["선택 안함", "남성", "여성"].index(st.session_state.get("user_gender", "선택 안함"))
+        )
+        phone = st.text_input("휴대전화번호", value=st.session_state.get("user_phone", ""))
+
+        uploaded_file = st.file_uploader("프로필 이미지 업로드", type=["jpg", "jpeg", "png"])
+        if uploaded_file:
+            file_path = f"profiles/{email.replace('.', '_')}.jpg"
+            storage.child(file_path).put(uploaded_file, st.session_state.id_token)
+            image_url = storage.child(file_path).get_url(st.session_state.id_token)
+            st.session_state.profile_image_url = image_url
+            st.image(image_url, width=150)
+        elif st.session_state.get("profile_image_url"):
+            st.image(st.session_state.profile_image_url, width=150)
+
+        if st.button("수정"):
+            st.session_state.user_email = new_email
+            st.session_state.user_name = name
+            st.session_state.user_gender = gender
+            st.session_state.user_phone = phone
+
+            firestore.child("users").child(new_email.replace(".", "_")).update({
+                "email": new_email,
+                "name": name,
+                "gender": gender,
+                "phone": phone,
+                "profile_image_url": st.session_state.get("profile_image_url", "")
+            })
+
+            st.success("사용자 정보가 저장되었습니다.")
+            time.sleep(1)
+            st.rerun()
+
+# ---------------------
+# 로그아웃 페이지 클래스
+# ---------------------
+class Logout:
+    def __init__(self):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.id_token = ""
+        st.session_state.user_name = ""
+        st.session_state.user_gender = "선택 안함"
+        st.session_state.user_phone = ""
+        st.session_state.profile_image_url = ""
+        st.success("로그아웃 되었습니다.")
+        time.sleep(1)
+        st.rerun()
 
 # ---------------------
 # EDA 페이지 클래스
@@ -240,17 +270,21 @@ class EDA:
             plt.tight_layout()
             st.pyplot(fig2)
 
+
 # ---------------------
-# 페이지 네비게이션
+# 페이지 객체 생성
 # ---------------------
-Page_Login    = st.Page(Login, title="Login", icon="🔐", url_path="login")
+Page_Login    = st.Page(Login,    title="Login",    icon="🔐", url_path="login")
 Page_Register = st.Page(lambda: Register(Page_Login.url_path), title="Register", icon="📝", url_path="register")
 Page_FindPW   = st.Page(FindPassword, title="Find PW", icon="🔎", url_path="find-password")
 Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW), title="Home", icon="🏠", url_path="home", default=True)
 Page_User     = st.Page(UserInfo, title="My Info", icon="👤", url_path="user-info")
-Page_Logout   = st.Page(Logout, title="Logout", icon="🔓", url_path="logout")
-Page_EDA      = st.Page(EDA, title="EDA", icon="📊", url_path="eda")
+Page_Logout   = st.Page(Logout,   title="Logout",  icon="🔓", url_path="logout")
+Page_EDA      = st.Page(EDA,      title="EDA",     icon="📊", url_path="eda")
 
+# ---------------------
+# 네비게이션 실행
+# ---------------------
 if st.session_state.logged_in:
     pages = [Page_Home, Page_User, Page_Logout, Page_EDA]
 else:
