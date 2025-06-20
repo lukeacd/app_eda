@@ -7,28 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ===== 네비게이션용 스텁 정의 시작 =====
-def Login():
-    st.header("🔐 로그인")
-    st.write("로그인 폼을 여기에 구현하세요.")
-
-def Register(prev_url):
-    st.header("📝 회원가입")
-    st.write("회원가입 폼을 여기에 구현하세요.")
-
-def FindPassword():
-    st.header("🔎 비밀번호 찾기")
-    st.write("비밀번호 찾기 폼을 여기에 구현하세요.")
-
-def UserInfo():
-    st.header("👤 내 정보")
-    st.write("사용자 정보를 여기에 표시하세요.")
-
-def Logout():
-    st.session_state.logged_in = False
-    st.experimental_rerun()
-# ===== 네비게이션용 스텁 정의 끝 =====
-
 # ---------------------
 # Firebase 설정
 # ---------------------
@@ -55,9 +33,108 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.id_token = ""
     st.session_state.user_name = ""
-    st.session_state.user_gender = "선택 안함"
+    st.session_state.user_gender = ""
     st.session_state.user_phone = ""
-    st.session_state.profile_image_url = ""
+
+# ---------------------
+# 로그인 페이지
+# ---------------------
+def Login():
+    st.header("🔐 로그인")
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+    if submitted:
+        try:
+            user = auth.sign_in_with_email_and_password(email, password)
+            st.session_state.logged_in = True
+            st.session_state.id_token = user['idToken']
+            st.session_state.user_email = email
+            # 사용자 정보 로드
+            uid = user['localId']
+            user_data = firestore.child("users").child(uid).get(st.session_state.id_token).val()
+            st.session_state.user_name = user_data.get("name", "")
+            st.session_state.user_gender = user_data.get("gender", "")
+            st.session_state.user_phone = user_data.get("phone", "")
+            st.success("로그인 성공!")
+            st.experimental_rerun()
+        except Exception:
+            st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
+
+# ---------------------
+# 회원가입 페이지
+# ---------------------
+def Register(prev_url):
+    st.header("📝 회원가입")
+    with st.form("register_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        password2 = st.text_input("Confirm Password", type="password")
+        name = st.text_input("Name")
+        gender = st.selectbox("Gender", ["","Male","Female","Other"])
+        phone = st.text_input("Phone")
+        submitted = st.form_submit_button("Register")
+    if submitted:
+        if password != password2:
+            st.error("비밀번호가 일치하지 않습니다.")
+        else:
+            try:
+                user = auth.create_user_with_email_and_password(email, password)
+                uid = user['localId']
+                token = user['idToken']
+                # DB에 사용자 프로필 저장
+                firestore.child("users").child(uid).set({
+                    "email": email,
+                    "name": name,
+                    "gender": gender,
+                    "phone": phone
+                }, token)
+                st.success("회원가입 완료! 로그인 페이지로 이동합니다.")
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"회원가입 오류: {e}")
+
+# ---------------------
+# 비밀번호 찾기 페이지
+# ---------------------
+def FindPassword():
+    st.header("🔎 비밀번호 찾기")
+    with st.form("pw_form"):
+        email = st.text_input("Email")
+        submitted = st.form_submit_button("Send Reset Email")
+    if submitted:
+        try:
+            auth.send_password_reset_email(email)
+            st.success("비밀번호 재설정 이메일이 발송되었습니다.")
+        except Exception:
+            st.error("이메일 전송 중 오류가 발생했습니다.")
+
+# ---------------------
+# 사용자 정보 페이지
+# ---------------------
+def UserInfo():
+    st.header("👤 내 정보")
+    if not st.session_state.logged_in:
+        st.warning("먼저 로그인해 주세요.")
+    else:
+        st.write(f"**Email:** {st.session_state.user_email}")
+        st.write(f"**Name:** {st.session_state.user_name}")
+        st.write(f"**Gender:** {st.session_state.user_gender}")
+        st.write(f"**Phone:** {st.session_state.user_phone}")
+
+# ---------------------
+# 로그아웃 함수
+# ---------------------
+def Logout():
+    st.session_state.logged_in = False
+    st.session_state.id_token = ""
+    st.session_state.user_email = ""
+    st.session_state.user_name = ""
+    st.session_state.user_gender = ""
+    st.session_state.user_phone = ""
+    st.success("로그아웃 되었습니다.")
+    st.experimental_rerun()
 
 # ---------------------
 # Home 페이지 클래스
@@ -67,7 +144,6 @@ class Home:
         st.title("🏠 Home")
         if st.session_state.get("logged_in"):
             st.success(f"{st.session_state.get('user_email')}님 환영합니다.")
-
         st.markdown("""
                 ---
                 **Population Trends Dataset**  
@@ -77,7 +153,7 @@ class Home:
         )
 
 # ---------------------
-# EDA 페이지 클래스
+# EDA 페이지 클래스 (변경 없음)
 # ---------------------
 class EDA:
     def __init__(self):
@@ -87,7 +163,7 @@ class EDA:
             st.info("Please upload population_trends.csv file.")
             return
 
-        # 데이터 로드 및 전처리
+        # Load and preprocess
         df = pd.read_csv(uploaded)
         df.replace('-', 0, inplace=True)
         df['Population'] = pd.to_numeric(df['인구'], errors='coerce')
@@ -100,7 +176,6 @@ class EDA:
         }
         df['Region'] = df['Region_KR'].map(mapping)
 
-        # 탭 구성
         tab_labels = ["기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"]
         tabs = st.tabs(tab_labels)
 
