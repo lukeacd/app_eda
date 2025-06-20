@@ -30,6 +30,7 @@ def Login():
         except Exception:
             st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
 
+
 def Register(prev_url):
     st.header("📝 회원가입")
     with st.form("register_form"):
@@ -63,6 +64,7 @@ def Register(prev_url):
                 else:
                     st.error(f"회원가입 오류: {msg}")
 
+
 def FindPassword():
     st.header("🔎 비밀번호 찾기")
     with st.form("pw_form"):
@@ -75,6 +77,7 @@ def FindPassword():
         except Exception:
             st.error("이메일 전송 중 오류가 발생했습니다.")
 
+
 def UserInfo():
     st.header("👤 내 정보")
     if not st.session_state.logged_in:
@@ -84,6 +87,7 @@ def UserInfo():
         st.write(f"**Name:** {st.session_state.user_name}")
         st.write(f"**Gender:** {st.session_state.user_gender}")
         st.write(f"**Phone:** {st.session_state.user_phone}")
+
 
 def Logout():
     st.session_state.clear()
@@ -190,7 +194,8 @@ class EDA:
             df_reg = df[df['Region'] != 'Nationwide'].copy()
             pivot = df_reg.pivot(index='Region', columns='Year', values='Population')
             st.subheader("Population Pivot Table")
-            st.dataframe(pivot.style.format(",.0f"))
+            # 원본 숫자 그대로 표시
+            st.dataframe(pivot)
 
         # 4) 변화량 분석
         with tabs[3]:
@@ -200,9 +205,13 @@ class EDA:
             df_reg['diff'] = df_reg.groupby('Region')['Population'].diff()
             top_diff = df_reg.dropna(subset=['diff']).nlargest(100, 'diff')
             st.subheader("Top 100 Yearly Increase Cases")
-            styled = top_diff[['Region', 'Year', 'diff']].rename(columns={'diff': 'Change'}).style \
-                .background_gradient(subset=['Change'], cmap='RdBu') \
+            styled = (
+                top_diff[['Region', 'Year', 'diff']]
+                .rename(columns={'diff': 'Change'})
+                .style
+                .background_gradient(subset=['Change'], cmap='RdBu')
                 .set_properties(**{'text-align': 'center'})
+            )
             st.dataframe(styled)
 
         # 5) 시각화
@@ -219,6 +228,7 @@ class EDA:
             ax2.legend(title='Region', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             st.pyplot(fig2)
+
 
 # ---------------------
 # 페이지 네비게이션
