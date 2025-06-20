@@ -17,18 +17,27 @@ def Login():
     if submitted:
         try:
             user = auth.sign_in_with_email_and_password(email, password)
+            # 세션에 로그인 상태 저장
             st.session_state.logged_in = True
-            st.session_state.id_token = user['idToken']
+            st.session_state.id_token   = user['idToken']
             st.session_state.user_email = email
+
+            # 프로필 로드
             uid = user['localId']
-            user_data = firestore.child("users").child(uid).get(st.session_state.id_token).val()
-            st.session_state.user_name = user_data.get("name", "")
+            user_data = firestore.child("users").child(uid)\
+                                  .get(st.session_state.id_token).val()
+            st.session_state.user_name   = user_data.get("name", "")
             st.session_state.user_gender = user_data.get("gender", "")
-            st.session_state.user_phone = user_data.get("phone", "")
+            st.session_state.user_phone  = user_data.get("phone", "")
+
             st.success("로그인 성공!")
+            # 곧바로 Home 페이지로 리다이렉트
+            st.experimental_set_query_params(page="home")
             st.experimental_rerun()
+
         except Exception:
             st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
+
 
 
 def Register(prev_url):
