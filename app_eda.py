@@ -194,81 +194,166 @@ class Logout:
 class EDA:
     def __init__(self):
         st.title("📊 Population Trends EDA")
+
         uploaded = st.file_uploader("Upload population_trends.csv", type="csv")
         if not uploaded:
             st.info("Please upload population_trends.csv file.")
             return
 
+        # --- 기본 로드 및 공통 전처리 ---
         df = pd.read_csv(uploaded)
         df.replace('-', 0, inplace=True)
-        df['Population'] = pd.to_numeric(df['인구'], errors='coerce')
-        df['Year'] = df['연도']
-        df['Region_KR'] = df['지역']
+        # Region 한글→영문 매핑
         mapping = {
             '서울':'Seoul','부산':'Busan','대구':'Daegu','인천':'Incheon','광주':'Gwangju','대전':'Daejeon',
             '울산':'Ulsan','세종':'Sejong','경기':'Gyeonggi','강원':'Gangwon','충북':'Chungbuk','충남':'Chungnam',
             '전북':'Jeonbuk','전남':'Jeonnam','경북':'Gyeongbuk','경남':'Gyeongnam','제주':'Jeju','전국':'Nationwide'
         }
-        df['Region'] = df['Region_KR'].map(mapping)
+        df['Region'] = df['지역'].map(mapping)
+        df['Year']   = pd.to_numeric(df['연도'], errors='coerce')
+        df['Population'] = pd.to_numeric(df['인구'], errors='coerce')
 
+        # 탭 생성
         tab_labels = ["기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"]
         tabs = st.tabs(tab_labels)
 
+        # --------------------- 탭 0: 기초 통계 ---------------------
         with tabs[0]:
             st.header("기초 통계 (Summary Statistics)")
-            buffer = io.StringIO()
-            df.info(buf=buffer)
-            st.subheader("DataFrame Info")
-            st.text(buffer.getvalue())
-            st.subheader("Descriptive Statistics")
-            st.dataframe(df[['Population']].describe())
 
+            # Sejong 만 전처리
+            df_sejong = df[df['Region'] == 'Sejong'].copy()
+            for col in ['인구', '출생아수(명)', '사망자수(명)']:
+                df_sejong[col] = pd.to_numeric(df_sejong[col], errors='coerce')
+
+            # 구조 출력
+            buffer = io.StringIO()
+            df_sejong.info(buf=buffer)
+            st.subheader("Sejong DataFrame Info")
+            st.text(buffer.getvalue())
+
+            # 요약 통계
+            st.subheader("Sejong Descriptive Statistics")
+            st.dataframe(df_sejong[['인구','출생아수(명)','사망자수(명)']].describe())
+
+        # --------------------- 탭 1: 연도별 추이 + 예측 ---------------------
         with tabs[1]:
-            st.header("연도별 추이 (Yearly Trend)")
-            df_nat = df[df['Region'] == 'Nationwide'].sort_values('Year')
+            st.header("연도별 추이 + 2035년 예측 (Yearly Trend + Forecast)")
+
+            df_nat = df[df['Region']=='Nationwide'].copy()
+            for col in ['출생아수(명)','사망자수(명)']:
+                df_nat[col] = pd.to_numeric(df_nat[col], errors='coerce')
+            df_nat.sort_values('Year', inplace=True)
+
+            # 최근 3년 순증가량 평균
+            df_nat['net_change'] = df_nat['출생아수(명)'] - df_nat['사망자수(명)']
+            avg_net = df_nat.tail(3)['net_change'].mean()
+
+            # Forecast 생성
+            last_year = int(df_nat['Year'].max())
+            last_pop  = df_nat.loc[df_nat['Year']==last_year,'Population'].iat[0]
+            years_pred = list(range(last_year+1, 2036))
+            pops_pred  = []
+            pop_temp   = last_pop
+            for _ in years_pred:
+                pop_temp += avg_net
+                pops_pred.append(pop_temp)
+            df_pred = pd.DataFrame({'Year': years_pred, 'Forecast': pops_pred})
+
+            # 플롯
             fig, ax = plt.subplots()
-            ax.plot(df_nat['Year'], df_nat['Population'], marker='o')
+            ax.plot(df_nat['Year'], df_nat['Population'], marker='o', label='History')
+            ax.plot(df_pred['Year'], df_pred['Forecast'], marker='x', linestyle='--', label='Forecast')
             ax.set_title('Nationwide Population Trend')
             ax.set_xlabel('Year')
             ax.set_ylabel('Population')
+            ax.legend()
             st.pyplot(fig)
 
+        # --------------------- 탭 2: 지역별 분석 + 5년 변화량 ---------------------
         with tabs[2]:
             st.header("지역별 분석 (Regional Analysis)")
-            df_reg = df[df['Region'] != 'Nationwide'].copy()
+
+            df_reg = df[df['Region']!='Nationwide'].copy()
+            df_reg['Population'] = pd.to_numeric(df_reg['Population'], errors='coerce')
+
+            # Pivot table
             pivot = df_reg.pivot(index='Region', columns='Year', values='Population')
             st.subheader("Population Pivot Table")
             st.dataframe(pivot)
 
+            # 5년 변화량 & 비율
+            max_year   = int(df_reg['Year'].max())
+            start_year = max_year - 5
+            pivot['change_5yr'] = pivot[max_year] - pivot[start_year]
+            pivot['pct_5yr']    = pivot['change_5yr'] / pivot[start_year] * 100
+            pivot_sorted = pivot.sort_values('change_5yr', ascending=False)
+
+            # 수평 막대그래프
+            fig1, ax1 = plt.subplots()
+            sns.barplot(x=pivot_sorted['change_5yr']/1000, y=pivot_sorted.index, ax=ax1)
+            ax1.set_title('5-Year Population Change by Region')
+            ax1.set_xlabel('Change (Thousands)')
+            ax1.set_ylabel('Region')
+            for p in ax1.patches:
+                ax1.text(p.get_width()+0.1, p.get_y()+p.get_height()/2, f"{p.get_width():.1f}", va='center')
+            st.pyplot(fig1)
+
+            # 변화율 막대그래프
+            fig2, ax2 = plt.subplots()
+            sns.barplot(x=pivot_sorted['pct_5yr'], y=pivot_sorted.index, ax=ax2)
+            ax2.set_title('5-Year % Population Change by Region')
+            ax2.set_xlabel('% Change')
+            ax2.set_ylabel('Region')
+            for p in ax2.patches:
+                ax2.text(p.get_width()+0.5, p.get_y()+p.get_height()/2, f"{p.get_width():.1f}%", va='center')
+            st.pyplot(fig2)
+
+        # --------------------- 탭 3: 증감 상위 100 사례 ---------------------
         with tabs[3]:
-            st.header("변화량 분석 (Change Analysis)")
-            df_reg = df[df['Region'] != 'Nationwide'].copy()
-            df_reg.sort_values(['Region', 'Year'], inplace=True)
-            df_reg['diff'] = df_reg.groupby('Region')['Population'].diff()
-            top_diff = df_reg.dropna(subset=['diff']).nlargest(100, 'diff')
-            st.subheader("Top 100 Yearly Increase Cases")
+            st.header("Top 100 Yearly Change Cases (Styled Table)")
+
+            df_all = df.copy()
+            df_all['Population'] = pd.to_numeric(df_all['Population'], errors='coerce')
+            df_all.sort_values(['Region','Year'], inplace=True)
+            df_all['diff'] = df_all.groupby('Region')['Population'].diff()
+
+            top100 = (
+                df_all.dropna(subset=['diff'])
+                      .nlargest(100, 'diff')
+                      [['Region','Year','diff']]
+                      .rename(columns={'diff':'Change'})
+            )
+
+            def highlight(val):
+                return 'background-color: #c6dbef' if val>0 else 'background-color: #fcbba1'
+
             styled = (
-                top_diff[['Region', 'Year', 'diff']]
-                .rename(columns={'diff': 'Change'})
-                .style
-                .background_gradient(subset=['Change'], cmap='RdBu')
-                .set_properties(**{'text-align': 'center'})
+                top100.style
+                      .format({'Change':'{:,.0f}'})
+                      .applymap(highlight, subset=['Change'])
+                      .set_caption("Top 100 Population Changes")
             )
             st.dataframe(styled)
 
+        # --------------------- 탭 4: 누적 영역 시각화 ---------------------
         with tabs[4]:
             st.header("시각화 (Visualization)")
-            df_area = df[df['Region'] != 'Nationwide']
+
+            df_area = df[df['Region']!='Nationwide'].copy()
+            df_area['Population'] = pd.to_numeric(df_area['Population'], errors='coerce')
             area_df = df_area.pivot(index='Year', columns='Region', values='Population')
-            fig2, ax2 = plt.subplots(figsize=(10, 6))
+
+            fig3, ax3 = plt.subplots(figsize=(10,6))
             colors = sns.color_palette('tab20', n_colors=area_df.shape[1])
-            area_df.plot(kind='area', ax=ax2, stacked=True, color=colors)
-            ax2.set_title('Population by Region Over Years')
-            ax2.set_xlabel('Year')
-            ax2.set_ylabel('Population')
-            ax2.legend(title='Region', bbox_to_anchor=(1.05, 1), loc='upper left')
+            area_df.plot(kind='area', ax=ax3, stacked=True, color=colors)
+            ax3.set_title('Population by Region Over Years')
+            ax3.set_xlabel('Year')
+            ax3.set_ylabel('Population')
+            ax3.legend(title='Region', bbox_to_anchor=(1.05,1), loc='upper left')
             plt.tight_layout()
-            st.pyplot(fig2)
+            st.pyplot(fig3)
+
 
 
 # ---------------------
