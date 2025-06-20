@@ -90,9 +90,17 @@ def UserInfo():
 
 
 def Logout():
-    st.session_state.clear()
+    # 로그인 상태만 초기화하고, 나머지 내부 상태는 보존합니다.
+    st.session_state.logged_in = False
+
+    # 사용자 정보만 삭제
+    for key in ["id_token", "user_email", "user_name", "user_gender", "user_phone"]:
+        if key in st.session_state:
+            st.session_state.pop(key)
+
     st.success("로그아웃 되었습니다.")
     st.experimental_rerun()
+
 
 # ---------------------
 # Firebase 설정
