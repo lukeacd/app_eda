@@ -1,9 +1,33 @@
 import streamlit as st
 import pyrebase
+import time
 import io
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+# ===== 네비게이션용 스텁 정의 시작 =====
+def Login():
+    st.header("🔐 로그인")
+    st.write("로그인 폼을 여기에 구현하세요.")
+
+def Register(prev_url):
+    st.header("📝 회원가입")
+    st.write("회원가입 폼을 여기에 구현하세요.")
+
+def FindPassword():
+    st.header("🔎 비밀번호 찾기")
+    st.write("비밀번호 찾기 폼을 여기에 구현하세요.")
+
+def UserInfo():
+    st.header("👤 내 정보")
+    st.write("사용자 정보를 여기에 표시하세요.")
+
+def Logout():
+    st.session_state.logged_in = False
+    st.experimental_rerun()
+# ===== 네비게이션용 스텁 정의 끝 =====
 
 # ---------------------
 # Firebase 설정
@@ -63,13 +87,12 @@ class EDA:
             st.info("Please upload population_trends.csv file.")
             return
 
-        # Load and preprocess
+        # 데이터 로드 및 전처리
         df = pd.read_csv(uploaded)
         df.replace('-', 0, inplace=True)
         df['Population'] = pd.to_numeric(df['인구'], errors='coerce')
         df['Year'] = df['연도']
         df['Region_KR'] = df['지역']
-        # Map Korean region to English
         mapping = {
             '서울':'Seoul','부산':'Busan','대구':'Daegu','인천':'Incheon','광주':'Gwangju','대전':'Daejeon',
             '울산':'Ulsan','세종':'Sejong','경기':'Gyeonggi','강원':'Gangwon','충북':'Chungbuk','충남':'Chungnam',
@@ -77,7 +100,7 @@ class EDA:
         }
         df['Region'] = df['Region_KR'].map(mapping)
 
-        # Define tabs for EDA sections
+        # 탭 구성
         tab_labels = ["기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"]
         tabs = st.tabs(tab_labels)
 
