@@ -7,38 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ---------------------
-# Firebase 설정
-# ---------------------
-firebase_config = {
-    "apiKey": "AIzaSyCswFmrOGU3FyLYxwbNPTp7hvQxLfTPIZw",
-    "authDomain": "sw-projects-49798.firebaseapp.com",
-    "databaseURL": "https://sw-projects-49798-default-rtdb.firebaseio.com",
-    "projectId": "sw-projects-49798",
-    "storageBucket": "sw-projects-49798-firebasestorage.app",
-    "messagingSenderId": "812186368395",
-    "appId": "1:812186368395:web:be2f7291ce54396209d78e"
-}
-
-firebase = pyrebase.initialize_app(firebase_config)
-auth = firebase.auth()
-firestore = firebase.database()
-storage = firebase.storage()
-
-# ---------------------
-# 세션 상태 초기화
-# ---------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_email = ""
-    st.session_state.id_token = ""
-    st.session_state.user_name = ""
-    st.session_state.user_gender = ""
-    st.session_state.user_phone = ""
-
-# ---------------------
-# 로그인 페이지
-# ---------------------
+# ===== 네비게이션용 스텁 정의 시작 =====
 def Login():
     st.header("🔐 로그인")
     with st.form("login_form"):
@@ -51,7 +20,6 @@ def Login():
             st.session_state.logged_in = True
             st.session_state.id_token = user['idToken']
             st.session_state.user_email = email
-            # 사용자 정보 로드
             uid = user['localId']
             user_data = firestore.child("users").child(uid).get(st.session_state.id_token).val()
             st.session_state.user_name = user_data.get("name", "")
@@ -62,9 +30,6 @@ def Login():
         except Exception:
             st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
 
-# ---------------------
-# 회원가입 페이지
-# ---------------------
 def Register(prev_url):
     st.header("📝 회원가입")
     with st.form("register_form"):
@@ -83,7 +48,6 @@ def Register(prev_url):
                 user = auth.create_user_with_email_and_password(email, password)
                 uid = user['localId']
                 token = user['idToken']
-                # DB에 사용자 프로필 저장
                 firestore.child("users").child(uid).set({
                     "email": email,
                     "name": name,
@@ -93,11 +57,12 @@ def Register(prev_url):
                 st.success("회원가입 완료! 로그인 페이지로 이동합니다.")
                 st.experimental_rerun()
             except Exception as e:
-                st.error(f"회원가입 오류: {e}")
+                msg = str(e)
+                if 'EMAIL_EXISTS' in msg:
+                    st.error("이미 사용 중인 이메일입니다. 다른 이메일을 사용해주세요.")
+                else:
+                    st.error(f"회원가입 오류: {msg}")
 
-# ---------------------
-# 비밀번호 찾기 페이지
-# ---------------------
 def FindPassword():
     st.header("🔎 비밀번호 찾기")
     with st.form("pw_form"):
@@ -110,9 +75,6 @@ def FindPassword():
         except Exception:
             st.error("이메일 전송 중 오류가 발생했습니다.")
 
-# ---------------------
-# 사용자 정보 페이지
-# ---------------------
 def UserInfo():
     st.header("👤 내 정보")
     if not st.session_state.logged_in:
@@ -123,38 +85,39 @@ def UserInfo():
         st.write(f"**Gender:** {st.session_state.user_gender}")
         st.write(f"**Phone:** {st.session_state.user_phone}")
 
-# ---------------------
-# 로그아웃 함수
-# ---------------------
 def Logout():
-    st.session_state.logged_in = False
-    st.session_state.id_token = ""
-    st.session_state.user_email = ""
-    st.session_state.user_name = ""
-    st.session_state.user_gender = ""
-    st.session_state.user_phone = ""
+    st.session_state.clear()
     st.success("로그아웃 되었습니다.")
     st.experimental_rerun()
 
-# ---------------------
-# Home 페이지 클래스
-# ---------------------
+# Firebase 설정
+firebase_config = {
+    "apiKey": "AIzaSyCswFmrOGU3FyLYxwbNPTp7hvQxLfTPIZw",
+    "authDomain": "sw-projects-49798.firebaseapp.com",
+    "databaseURL": "https://sw-projects-49798-default-rtdb.firebaseio.com",
+    "projectId": "sw-projects-49798",
+    "storageBucket": "sw-projects-49798-firebasestorage.app",
+    "messagingSenderId": "812186368395",
+    "appId": "1:812186368395:web:be2f7291ce54396209d78e"
+}
+firebase = pyrebase.initialize_app(firebase_config)
+auth = firebase.auth()
+firestore = firebase.database()
+storage = firebase.storage()
+
 class Home:
     def __init__(self, login_page, register_page, findpw_page):
         st.title("🏠 Home")
-        if st.session_state.get("logged_in"):
-            st.success(f"{st.session_state.get('user_email')}님 환영합니다.")
+        if st.session_state.logged_in:
+            st.success(f"{st.session_state.user_email}님 환영합니다.")
         st.markdown("""
-                ---
-                **Population Trends Dataset**  
-                - File: `population_trends.csv`  
-                - Description: Yearly and regional population, births, and deaths statistics  
-                """
+---
+**Population Trends Dataset**  
+- File: `population_trends.csv`  
+- Description: Yearly and regional population, births, and deaths statistics  
+"""
         )
 
-# ---------------------
-# EDA 페이지 클래스 (변경 없음)
-# ---------------------
 class EDA:
     def __init__(self):
         st.title("📊 Population Trends EDA")
@@ -162,8 +125,6 @@ class EDA:
         if not uploaded:
             st.info("Please upload population_trends.csv file.")
             return
-
-        # Load and preprocess
         df = pd.read_csv(uploaded)
         df.replace('-', 0, inplace=True)
         df['Population'] = pd.to_numeric(df['인구'], errors='coerce')
@@ -175,11 +136,8 @@ class EDA:
             '전북':'Jeonbuk','전남':'Jeonnam','경북':'Gyeongbuk','경남':'Gyeongnam','제주':'Jeju','전국':'Nationwide'
         }
         df['Region'] = df['Region_KR'].map(mapping)
-
         tab_labels = ["기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"]
         tabs = st.tabs(tab_labels)
-
-        # 1) 기초 통계
         with tabs[0]:
             st.header("기초 통계 (Summary Statistics)")
             buffer = io.StringIO()
@@ -188,8 +146,6 @@ class EDA:
             st.text(buffer.getvalue())
             st.subheader("Descriptive Statistics")
             st.dataframe(df[['Population']].describe())
-
-        # 2) 연도별 추이
         with tabs[1]:
             st.header("연도별 추이 (Yearly Trend)")
             df_nat = df[df['Region']=='Nationwide'].sort_values('Year')
@@ -199,16 +155,12 @@ class EDA:
             ax.set_xlabel('Year')
             ax.set_ylabel('Population')
             st.pyplot(fig)
-
-        # 3) 지역별 분석
         with tabs[2]:
             st.header("지역별 분석 (Regional Analysis)")
             df_reg = df[df['Region']!='Nationwide'].copy()
             pivot = df_reg.pivot(index='Region', columns='Year', values='Population')
             st.subheader("Population Pivot Table")
             st.dataframe(pivot.style.format(",.0f"))
-
-        # 4) 변화량 분석
         with tabs[3]:
             st.header("변화량 분석 (Change Analysis)")
             df_reg.sort_values(['Region','Year'], inplace=True)
@@ -216,12 +168,10 @@ class EDA:
             top_diff = df_reg.dropna(subset=['diff']).nlargest(100, 'diff')
             st.subheader("Top 100 Yearly Increase Cases")
             st.dataframe(
-                top_diff[['Region','Year','diff']]  
+                top_diff[['Region','Year','diff']]
                 .rename(columns={'diff':'Change'})
                 .style.format({'Change':",.0f"})
             )
-
-        # 5) 시각화
         with tabs[4]:
             st.header("시각화 (Visualization)")
             df_area = df[df['Region']!='Nationwide']
@@ -235,10 +185,7 @@ class EDA:
             ax2.legend(title='Region', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             st.pyplot(fig2)
-
-# ---------------------
 # 페이지 네비게이션
-# ---------------------
 Page_Login    = st.Page(Login,    title="Login",    icon="🔐", url_path="login")
 Page_Register = st.Page(lambda: Register(Page_Login.url_path), title="Register", icon="📝", url_path="register")
 Page_FindPW   = st.Page(FindPassword, title="Find PW", icon="🔎", url_path="find-password")
@@ -246,11 +193,9 @@ Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW), ti
 Page_User     = st.Page(UserInfo, title="My Info", icon="👤", url_path="user-info")
 Page_Logout   = st.Page(Logout,   title="Logout",  icon="🔓", url_path="logout")
 Page_EDA      = st.Page(EDA,      title="EDA",     icon="📊", url_path="eda")
-
 if st.session_state.logged_in:
     pages = [Page_Home, Page_User, Page_Logout, Page_EDA]
 else:
     pages = [Page_Home, Page_Login, Page_Register, Page_FindPW]
-
 selected_page = st.navigation(pages)
 selected_page.run()
