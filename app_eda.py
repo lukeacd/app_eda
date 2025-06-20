@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ===== 네비게이션용 함수 정의 =====
+
 def Login():
     st.header("🔐 로그인")
     with st.form("login_form"):
@@ -17,27 +18,19 @@ def Login():
     if submitted:
         try:
             user = auth.sign_in_with_email_and_password(email, password)
-            # 세션에 로그인 상태 저장
             st.session_state.logged_in = True
-            st.session_state.id_token   = user['idToken']
+            st.session_state.id_token = user['idToken']
             st.session_state.user_email = email
-
-            # 프로필 로드
             uid = user['localId']
-            user_data = firestore.child("users").child(uid)\
-                                  .get(st.session_state.id_token).val()
-            st.session_state.user_name   = user_data.get("name", "")
+            user_data = firestore.child("users").child(uid).get(st.session_state.id_token).val()
+            st.session_state.user_name = user_data.get("name", "")
             st.session_state.user_gender = user_data.get("gender", "")
-            st.session_state.user_phone  = user_data.get("phone", "")
-
+            st.session_state.user_phone = user_data.get("phone", "")
             st.success("로그인 성공!")
-            # 곧바로 Home 페이지로 리다이렉트
-            st.experimental_set_query_params(page="home")
+            st.query_params = {"page": "home"}
             st.experimental_rerun()
-
         except Exception:
             st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
-
 
 
 def Register(prev_url):
@@ -99,17 +92,12 @@ def UserInfo():
 
 
 def Logout():
-    # 로그인 상태만 초기화하고, 나머지 내부 상태는 보존합니다.
     st.session_state.logged_in = False
-
-    # 사용자 정보만 삭제
     for key in ["id_token", "user_email", "user_name", "user_gender", "user_phone"]:
-        if key in st.session_state:
-            st.session_state.pop(key)
-
+        st.session_state.pop(key, None)
     st.success("로그아웃 되었습니다.")
+    st.query_params = {"page": "home"}
     st.experimental_rerun()
-
 
 # ---------------------
 # Firebase 설정
@@ -167,7 +155,6 @@ class EDA:
             st.info("Please upload population_trends.csv file.")
             return
 
-        # 데이터 로드 및 전처리
         df = pd.read_csv(uploaded)
         df.replace('-', 0, inplace=True)
         df['Population'] = pd.to_numeric(df['인구'], errors='coerce')
@@ -180,11 +167,9 @@ class EDA:
         }
         df['Region'] = df['Region_KR'].map(mapping)
 
-        # 탭 구성
         tab_labels = ["기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"]
         tabs = st.tabs(tab_labels)
 
-        # 1) 기초 통계
         with tabs[0]:
             st.header("기초 통계 (Summary Statistics)")
             buffer = io.StringIO()
@@ -194,7 +179,6 @@ class EDA:
             st.subheader("Descriptive Statistics")
             st.dataframe(df[['Population']].describe())
 
-        # 2) 연도별 추이
         with tabs[1]:
             st.header("연도별 추이 (Yearly Trend)")
             df_nat = df[df['Region'] == 'Nationwide'].sort_values('Year')
@@ -205,16 +189,13 @@ class EDA:
             ax.set_ylabel('Population')
             st.pyplot(fig)
 
-        # 3) 지역별 분석
         with tabs[2]:
             st.header("지역별 분석 (Regional Analysis)")
             df_reg = df[df['Region'] != 'Nationwide'].copy()
             pivot = df_reg.pivot(index='Region', columns='Year', values='Population')
             st.subheader("Population Pivot Table")
-            # 원본 숫자 그대로 표시
             st.dataframe(pivot)
 
-        # 4) 변화량 분석
         with tabs[3]:
             st.header("변화량 분석 (Change Analysis)")
             df_reg = df[df['Region'] != 'Nationwide'].copy()
@@ -231,7 +212,6 @@ class EDA:
             )
             st.dataframe(styled)
 
-        # 5) 시각화
         with tabs[4]:
             st.header("시각화 (Visualization)")
             df_area = df[df['Region'] != 'Nationwide']
@@ -245,7 +225,6 @@ class EDA:
             ax2.legend(title='Region', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             st.pyplot(fig2)
-
 
 # ---------------------
 # 페이지 네비게이션
