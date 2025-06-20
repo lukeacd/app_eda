@@ -17,18 +17,28 @@ def Login():
         submitted = st.form_submit_button("Login")
     if submitted:
         try:
+            # Firebase 인증
             user = auth.sign_in_with_email_and_password(email, password)
-            st.session_state.logged_in = True
-            st.session_state.id_token = user['idToken']
-            st.session_state.user_email = email
+            # 세션에 로그인 상태 저장
+            st.session_state.logged_in    = True
+            st.session_state.id_token     = user['idToken']
+            st.session_state.user_email   = email
+
+            # 사용자 프로필 로드
             uid = user['localId']
-            user_data = firestore.child("users").child(uid).get(st.session_state.id_token).val()
-            st.session_state.user_name = user_data.get("name", "")
-            st.session_state.user_gender = user_data.get("gender", "")
-            st.session_state.user_phone = user_data.get("phone", "")
+            user_data = firestore.child("users") \
+                                 .child(uid) \
+                                 .get(st.session_state.id_token) \
+                                 .val()
+            st.session_state.user_name    = user_data.get("name", "")
+            st.session_state.user_gender  = user_data.get("gender", "")
+            st.session_state.user_phone   = user_data.get("phone", "")
+
             st.success("로그인 성공!")
-            st.query_params = {"page": "home"}
+            # 한 번의 리런으로 Home 페이지로 이동
+            st.experimental_set_query_params(page="home")
             st.experimental_rerun()
+
         except Exception:
             st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
 
@@ -92,11 +102,15 @@ def UserInfo():
 
 
 def Logout():
+    # 로그인 상태만 초기화
     st.session_state.logged_in = False
+    # 사용자 관련 키들만 제거
     for key in ["id_token", "user_email", "user_name", "user_gender", "user_phone"]:
         st.session_state.pop(key, None)
+
     st.success("로그아웃 되었습니다.")
-    st.query_params = {"page": "home"}
+    # Home 페이지로 바로 이동
+    st.experimental_set_query_params(page="home")
     st.experimental_rerun()
 
 # ---------------------
